@@ -16,7 +16,7 @@
 #include <signal.h>
 #include <errno.h>
 
-#include "qmi_client.h"
+#include "qmi_cci.h"
 #include "qmi_idl_lib_internal.h"
 #include "time_service_v01.h"
 #include "localdefs.h"
@@ -65,6 +65,9 @@ static pthread_cond_t qmi_serv_hdl_thread_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_t sleep_thread, read_time, connection_mgr, time_thread;
+
+/* Forward declaration */
+static void genoff_qmi_error_cb(qmi_client_type clnt, qmi_cci_error_type error, void *error_cb_data);
 
 /* This array lists the bases which have to be sent to MODEM */
 static int genoff_update_to_modem[] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -626,7 +629,7 @@ genoff_send_modem(struct time_genoff_info *genoff_args)
 
 	/* Locking to syncronize with indication read */
 	pthread_mutex_lock(&indication.lock);
-	rc = qmi_client_send_msg_sync(modem_time_client,
+	rc = qmi_cci_send_msg_sync(modem_time_client,
 			QMI_TIME_GENOFF_SET_REQ_MSG_V01, &time_req_msg,
 			sizeof(time_req_msg), &time_resp_msg,
 			sizeof(time_resp_msg), 5000);
@@ -797,7 +800,7 @@ static void tod_update_ind_cb(qmi_client_type handle, unsigned long msg_id,
 	pthread_mutex_lock(&indication.lock);
 
 	pthread_mutex_lock(&genoff_mutex);
-	rc = qmi_client_message_decode(handle, QMI_IDL_INDICATION, msg_id,
+	rc = qmi_cci_message_decode(handle, QMI_IDL_INDICATION, msg_id,
 			buffer, buffer_len, &ind_buff,
 			sizeof(time_update_indication_message_v01));
 	if (rc != QMI_NO_ERR) {
@@ -830,7 +833,7 @@ error:
 
 }
 
-static void genoff_qmi_error_cb(qmi_client_type clnt, qmi_client_error_type error, void *error_cb_data)
+static void genoff_qmi_error_cb(qmi_client_type clnt, qmi_cci_error_type error, void *error_cb_data)
 {
 	int rc;
 
@@ -903,28 +906,28 @@ void *genoff_modem_qmi_service_handle_cb(void)
 	if (!modem_qmi_initialized) {
 
 		if (modem_time_client) {
-			qmi_client_release(modem_time_client);
+			qmi_cci_release(modem_time_client);
 			modem_time_client = NULL;
 		}
 
 		/* The server has come up, store the information in modem_info variable */
-		rc = qmi_client_get_service_list(modem_time_service_object, &modem_info,
+		rc = qmi_cci_get_service_list(modem_time_service_object, &modem_info,
 					&num_entries, &num_services);
 		if (rc != QMI_NO_ERR) {
-			TIME_LOGE("%s: qmi_client_get_service_list returned %dnum_service %d num_entries %d\n",
+			TIME_LOGE("%s: qmi_cci_get_service_list returned %dnum_service %d num_entries %d\n",
 					__func__,
 					rc, num_services, num_entries);
-			qmi_client_release(notifier);
+			qmi_cci_release(notifier);
 			notifier = NULL;
 			return NULL;
 		}
 
-		rc = qmi_client_init(&modem_info, modem_time_service_object, tod_update_ind_cb,
+		rc = qmi_cci_init(&modem_info, modem_time_service_object, tod_update_ind_cb,
 				NULL, &modem_os_signals, &modem_time_client);
 
 		if (rc != QMI_NO_ERR) {
 			TIME_LOGE("%s:Modem client init failed %d\n", __func__, rc);
-			qmi_client_release(notifier);
+			qmi_cci_release(notifier);
 			notifier = NULL;
 			return NULL;
 		}
@@ -934,7 +937,7 @@ void *genoff_modem_qmi_service_handle_cb(void)
 		memset(&time_request, 0, sizeof(time_request));
 		memset(&resp_message, 0, sizeof(resp_message));
 		time_request.base = ATS_TOD;
-		rc = qmi_client_send_msg_sync(modem_time_client, QMI_TIME_GENOFF_GET_REQ_MSG_V01,
+		rc = qmi_cci_send_msg_sync(modem_time_client, QMI_TIME_GENOFF_GET_REQ_MSG_V01,
 						&time_request, sizeof(time_request),
 						&resp_message, sizeof(resp_message), 1000);
 
@@ -947,7 +950,7 @@ void *genoff_modem_qmi_service_handle_cb(void)
 			TIME_LOGE("Daemon:%s: Error in reading full time ignoring update rc=%d"
 					" resp=%d ", __func__, rc,
 					resp_message.resp.error);
-			qmi_client_release(modem_time_client);
+			qmi_cci_release(modem_time_client);
 			modem_time_client = NULL;
 			return NULL;
 		}
@@ -959,7 +962,7 @@ void *genoff_modem_qmi_service_handle_cb(void)
 		TIME_LOGD("%s: Sending indication turn off request msg_id %d\n",
 				__func__, ind_turn_off_req.msg_id);
 
-		rc = qmi_client_send_msg_sync(modem_time_client,
+		rc = qmi_cci_send_msg_sync(modem_time_client,
 				QMI_TIME_TURN_OFF_IND_REQ_MSG_V01,
 				&ind_turn_off_req, sizeof(ind_turn_off_req),
 				&ind_turn_off_rsp, sizeof(ind_turn_off_rsp), 1000);
@@ -1005,12 +1008,12 @@ void *genoff_modem_qmi_service_handle_cb(void)
 		modem_qmi_initialized = 1;
 		pthread_mutex_unlock(&qmi_clnt_mutex);
 
-		rc = qmi_client_register_error_cb(modem_time_client, genoff_qmi_error_cb,
+		rc = qmi_cci_register_error_cb(modem_time_client, genoff_qmi_error_cb,
 							NULL);
 		if (rc != QMI_NO_ERR) {
 		TIME_LOGE("Daemon:%s: register error cb failed %d\n",
 							__func__, rc);
-		qmi_client_release(modem_time_client);
+		qmi_cci_release(modem_time_client);
 		modem_time_client = NULL;
 		return NULL;
 		}
@@ -1036,7 +1039,7 @@ int genoff_modem_qmi_init(void)
 				__func__);
 		return -EINVAL;
 	}
-	rc = qmi_client_notifier_init(modem_time_service_object, &os_params,
+	rc = qmi_cci_notifier_init(modem_time_service_object, &os_params,
 					&notifier);
 	if (rc != QMI_NO_ERR) {
 		TIME_LOGE("Daemon:%s: Notifier init failed %d\n", __func__, rc);
@@ -1048,7 +1051,7 @@ int genoff_modem_qmi_init(void)
 	if (rc != 0) {
 		TIME_LOGE("Daemon:%s: Failed to create thread to handle modem qmi cb\n",
 								__func__);
-		qmi_client_release(notifier);
+		qmi_cci_release(notifier);
 		notifier = NULL;
 		return -EINVAL;
 	}
@@ -1063,12 +1066,12 @@ int genoff_modem_qmi_init(void)
 	pthread_cond_timedwait(&qmi_serv_hdl_thread_cond, &qmi_clnt_mutex, &time);
 	pthread_mutex_unlock(&qmi_clnt_mutex);
 
-	rc = qmi_client_register_notify_cb(notifier, time_service_modem_serv_notify_cb,
+	rc = qmi_cci_register_notify_cb(notifier, time_service_modem_serv_notify_cb,
 			NULL);
 
 	if (rc != QMI_NO_ERR) {
 		TIME_LOGE("Daemon:%s: Register Notifier cb failed %d\n", __func__, rc);
-		qmi_client_release(notifier);
+		qmi_cci_release(notifier);
 		notifier = NULL;
 		return -EINVAL;
 	}
@@ -1181,7 +1184,7 @@ static void read_offset(void *recv_arg)
 		memset(&resp_message, 0, sizeof(resp_message));
 
 		time_request.base = indication.offset;
-		rc = qmi_client_send_msg_sync(modem_time_client,
+		rc = qmi_cci_send_msg_sync(modem_time_client,
 				QMI_TIME_GENOFF_GET_REQ_MSG_V01,
 				&time_request, sizeof(time_request),
 				&resp_message, sizeof(resp_message), 1000);
@@ -1312,7 +1315,7 @@ int main(void)
 
 out:
 	if (modem_qmi_initialized) {
-		qmi_client_release(modem_time_client);
+		qmi_cci_release(modem_time_client);
 		modem_time_client = NULL;
 	}
 	return 0;
