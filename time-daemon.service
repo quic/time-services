@@ -1,0 +1,15 @@
+[Unit]
+Description=Time Services Daemon
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/time_daemon
+Restart=on-failure
+StateDirectory=time
+
+# Device access for RTC (read-only)
+DeviceAllow=/dev/rtc0 r
+DevicePolicy=closed
+
+[Install]
+WantedBy=multi-user.target
