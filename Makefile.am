@@ -23,6 +23,4 @@ time_daemon_LDADD = $(requiredlibs)
 time_daemon_LDFLAGS = -lpthread  @GLIB_LIBS@
 
 # Systemd service file installation
-if HAVE_SYSTEMD
 systemdsystemunit_DATA = time-daemon.service
-endif
