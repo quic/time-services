@@ -3,8 +3,8 @@
 
 # Requires autoconf tool later than 2.61
 AC_PREREQ(2.61)
-# Initialize the qmi-framework package version 1.0.0
-AC_INIT([time-services],1.0.0)
+# Initialize the qmi-framework package version 0.1.1
+AC_INIT([time-services],0.1.1)
 # Does not strictly follow GNU Coding standards
 AM_INIT_AUTOMAKE([foreign])
 # Disables auto rebuilding of configure, Makefile.ins

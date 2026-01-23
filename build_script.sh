@@ -50,7 +50,12 @@ echo "Running configure.."
 echo "Running make.."
 make || { echo "make failed"; exit 1; }
 
-make install || { echo "make install failed"; exit 1; }
+# Use sudo only if not running as root
+if [ "$(id -u)" -eq 0 ]; then
+    make install || { echo "make install failed"; exit 1; }
+else
+    sudo make install || { echo "make install failed"; exit 1; }
+fi
 
 FILES_TO_CLEAN=(
     aclocal.m4 configure ar-lib config.h config.h.in config.log config.status libtool
